@@ -125,15 +125,14 @@ class OccipitalOrdinance {
       #define elastic_lambda 3.2
       #define elastic_mu 4.2
       #define incompressible_viscosity 1.0
+
       // viscous fluid
-      /*
-      #define relax 0.05
-      #define distribution_size 0.98
-      // Lamé parameters for stress-strain relationship
-      #define elastic_lambda 0.2
-      #define elastic_mu 0.1
-      #define incompressible_viscousity 0.05
-      */ 
+      //#define relax 0.05
+      //#define distribution_size 0.98
+      //// Lamé parameters for stress-strain relationship
+      //#define elastic_lambda 0.2
+      //#define elastic_mu 0.1
+      //#define incompressible_viscosity 0.05
 
       // estimation str
       #define difd 2.0
@@ -343,7 +342,7 @@ class OccipitalOrdinance {
                 vec4 XV0 = texelFetch(iChannel0[0], ivec2(mod(tpos,R)), 0);
                 vec4 MC0 = texelFetch(iChannel0[1], ivec2(mod(tpos,R)), 0);
 
-                vec2  X0 = 0.*XV0.xy + tpos; // INVESTIGATE WHY THIS IS MULTIPLIED BY 0.0
+                vec2  X0 = XV0.xy + tpos;
                 vec2  V0 = XV0.zw;
                 float M0 = MC0.x;
                 vec2  dx = X0 - X;
@@ -466,9 +465,8 @@ class OccipitalOrdinance {
             vec2 grad = vec2(0.);
         
             float rho2 = 0.;
-            //compute the smoothed density and velocity
-            range(i, -2, 2) range(j, -2, 2)
-            {
+            // compute the smoothed density and velocity
+            range(i, -2, 2) range(j, -2, 2) {
                 vec2 tpos = floor(pos) + vec2(i,j);
                 vec4 XV = texelFetch(iChannel0[0], ivec2(mod(tpos,R)), 0);
                 vec4 MC = texelFetch(iChannel0[1], ivec2(mod(tpos,R)), 0);
@@ -500,7 +498,7 @@ class OccipitalOrdinance {
           float d = smoothstep(0.3,0.7,mix(rho, rho2,1.0));
           gl_FragColor.rgb = vec3(0.0,0.5,1.0)*De*De + 0.04*rho2 + texture(scene, c).xyz; //
 
-          vec3 background = texture(sceneBG, vUv).rgb;
+          vec3 background    = texture(sceneBG  , vUv).rgb;
           vec3 skyBackground = texture(sceneBack, vUv).rgb;
           background = (background == vec3(1.0, 0.0, 1.0)) ? skyBackground : background;
 
