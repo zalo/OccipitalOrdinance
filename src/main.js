@@ -29,6 +29,8 @@ class OccipitalOrdinance {
     this.renderer.domElement.style.position = 'fixed';
     this.renderer.domElement.style.zIndex   = '-1000';
     this.container.appendChild(this.renderer.domElement);
+    this.container.style.touchAction = "none";
+    this.container.style.userSelect = "none";
 
     this.raycaster = new THREE.Raycaster();
     this.pointer   = new THREE.Vector3();
