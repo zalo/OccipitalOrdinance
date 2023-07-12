@@ -100,8 +100,7 @@ class OccipitalOrdinance {
 
     this.reintegrationComputation = new MultiTargetGPUComputationRenderer(this.width, this.height, this.renderer);
     this.bufferA = this.reintegrationComputation.addVariable("iChannel0", undefined, 3);
-    this.bufferC = this.reintegrationComputation.addVariable("iChannel2", undefined, 2);
-    this.bufferD = this.reintegrationComputation.addVariable("iChannel3");
+    this.bufferC = this.reintegrationComputation.addVariable("iChannel2", undefined, 3);
 
     this.commonFunctions = `
       uniform vec2 iResolution;
@@ -172,7 +171,7 @@ class OccipitalOrdinance {
           return p-c*clamp(round(p/c),-l,l);
       }`;
 
-    this.bufferAPass = this.reintegrationComputation.addPass(this.bufferA, [this.bufferC, this.bufferD], `
+    this.bufferAPass = this.reintegrationComputation.addPass(this.bufferA, [this.bufferC], `
       uniform sampler2D scene;
       uniform float outputResolutionScale;
       `+this.commonFunctions+`
@@ -201,7 +200,7 @@ class OccipitalOrdinance {
               vec2 tpos = pos + vec2(i,j);
               vec4 XV = texelFetch(iChannel2[0], ivec2(mod(tpos,R)), 0);
               vec4 MC = texelFetch(iChannel2[1], ivec2(mod(tpos,R)), 0);
-              mat2 D0 = mat2(texelFetch(iChannel3, ivec2(mod(tpos,R)), 0));
+              mat2 D0 = mat2(texelFetch(iChannel2[2], ivec2(mod(tpos,R)), 0));
 
               vec2 X0 = XV.xy + tpos;
               vec2 V0 = XV.zw;
@@ -283,11 +282,8 @@ class OccipitalOrdinance {
                  + idx.yxw*border(p + dx.yx);
           return vec3(normalize(r.xy), r.z + 1e-4);
       }
-      
-      vec2 normalize2(vec2 a) {
-          return all(equal(a, vec2(0.)))?vec2(0.):normalize(a);
-      }
-      
+
+      vec2 normalize2(vec2 a) { return all(equal(a, vec2(0.)))?vec2(0.):normalize(a); }
       
       mat2 strain(mat2 D) {
           float J = abs(determinant(D)) + 0.001;
@@ -313,10 +309,10 @@ class OccipitalOrdinance {
       
       layout(location = 0) out vec4 XVOut;
       layout(location = 1) out vec4 MCOut;
+      layout(location = 2) out vec4 DOut;
 
       void main() {
           vec2 pos = gl_FragCoord.xy;// / resolution.xy
-          vec2 uv = pos/R;
           ivec2 p = ivec2(pos);
 
           vec4 XV = texelFetch(iChannel0[0], ivec2(mod(pos,R)), 0);
@@ -327,45 +323,50 @@ class OccipitalOrdinance {
           vec2  V = XV.zw;
           float M = clamp(MC.x, 0., 2.0);
           vec2  C = MC.yz;
+
           // not vacuum
           if (M > 0.0) {
               // Compute the force
-            
               vec2 F = vec2(0.);
               float b = 0.;
-         
-              mat2 local_strain = strain(D);
-              if(M > 0.0)
-              {
-                  range(i, -2,2) range(j, -2, 2)
-                  {
-                      if(!(i == 0 && j == 0))
-                      {
-                          vec2 tpos = pos + vec2(i,j);
-                          vec4 XV0 = texelFetch(iChannel0[0], ivec2(mod(tpos,R)), 0);
-                          vec4 MC0 = texelFetch(iChannel0[1], ivec2(mod(tpos,R)), 0);
 
-                          vec2  X0 = 0.*XV0.xy + tpos; // INVESTIGATE WHY THIS IS MULTIPLIED BY 0.0
-                          vec2  V0 = XV0.zw;
-                          float M0 = MC0.x;
-                          vec2  dx = X0 - X;
-                          vec2  dv = V0 - V;
-                          mat2  D0 = mat2(texelFetch(iChannel0[2], ivec2(mod(tpos,R)), 0));
-                          float weight = GS(0.8*dx);
-                         
-                          //F += M0*strain((D0*M + D*M0)/(M+M0))*dx*weight;
-                          mat2 strain0 = (M0*strain(D0) + M*local_strain)/(M0+M) + mat2(2.4*dot(dx,dv));
-                          F += M0*strain0*dx*weight;
-                         
-                          b += weight;
-                      }
-                  }
-             
-                  F /= b;
-                  F = clamp(F, -0.4,0.4);
+              mat2 local_strain = strain(D);
+
+              //Compute the velocity gradient matrix
+              mat2 B = mat2(0.);
+              float rho = 0.;
+
+              range(i, -2,2) range(j, -2, 2) {
+                vec2 tpos = pos + vec2(i,j);
+                vec4 XV0 = texelFetch(iChannel0[0], ivec2(mod(tpos,R)), 0);
+                vec4 MC0 = texelFetch(iChannel0[1], ivec2(mod(tpos,R)), 0);
+
+                vec2  X0 = 0.*XV0.xy + tpos; // INVESTIGATE WHY THIS IS MULTIPLIED BY 0.0
+                vec2  V0 = XV0.zw;
+                float M0 = MC0.x;
+                vec2  dx = X0 - X;
+                vec2  dv = V0 - V;
+                mat2  D0 = mat2(texelFetch(iChannel0[2], ivec2(mod(tpos,R)), 0));
+
+                float weight = clamp(M0, 0.0, 1.0)*GS(0.8*dx);
+
+                if(!(i == 0 && j == 0)) {
+                    //F += M0*strain((D0*M + D*M0)/(M+M0))*dx*weight;
+                    mat2 strain0 = (M0*strain(D0) + M*local_strain)/(M0+M) + mat2(2.4*dot(dx,dv));
+                    F += M0*strain0*dx*weight;
+                }
+                if(M>0.01){
+                  rho += M0*weight;
+                  B += mat2(dv*dx.x,dv*dx.y)*weight;
+                }
+                b += weight;
               }
-              if(iMouse.z > 0.)
-              {
+              B   /= b + 0.01;
+              rho /= b + 0.01;
+              F   /= b;
+              F = clamp(F, -0.4,0.4);
+
+              if(iMouse.z > 0.){
                   vec2 dx= pos - iMouse.xy;
                   F += 0.01*normalize2(dx)*GS(dx/80.);
               }
@@ -384,66 +385,12 @@ class OccipitalOrdinance {
               //velocity limit
               float v = length(V);
               V /= (v > 1.)?1.*v:1.;
-          }
-          
-          //save
-          X = X - pos;
-          XVOut = clamp(vec4(X, V), -1.0, 1.0);
-          MCOut = vec4(MC.x, clamp(C, 0.0, 1.0), 1.0);
-      }`);
-    Object.assign(this.bufferCPass.material.uniforms, this.uniforms);
-    this.bufferCPass.material.uniformsNeedUpdate = true;
-    this.bufferCPass.material.needsUpdate = true;
 
-    this.bufferDPass = this.reintegrationComputation.addPass(this.bufferD, [this.bufferA], `
-      out highp vec4 pc_fragColor;
-      uniform float outputResolutionScale;
-      `+this.commonFunctions+`
-      vec2 normalize2(vec2 a) { return all(equal(a, vec2(0.)))?vec2(0.):normalize(a); }
-      
-      void main() {
-          vec2 pos = gl_FragCoord.xy;// / resolution.xy
-          ivec2 p = ivec2(pos);
-
-          vec4 XV = texelFetch(iChannel0[0], ivec2(mod(pos,R)), 0);
-          vec4 MC = texelFetch(iChannel0[1], ivec2(mod(pos,R)), 0);
-
-          mat2  D = mat2(texelFetch(iChannel0[2], ivec2(mod(pos,R)), 0));
-          vec2  X = XV.xy + pos;
-          vec2  V = XV.zw;
-          float M = MC.x;
-          
-          if(M > 0.01) //not vacuum
-          {
-              //Compute the velocity gradient matrix
-              mat2 B = mat2(0.);
-              float a = 0.01;
-              float rho = 0.;
-              range(i, -2, 2) range(j, -2, 2)
-              {
-                  vec2 tpos = pos + vec2(i,j);
-                  vec4 XV0 = texelFetch(iChannel0[0], ivec2(mod(tpos,R)), 0);
-                  vec4 MC0 = texelFetch(iChannel0[1], ivec2(mod(tpos,R)), 0);
-
-                  vec2  X0 = XV0.xy + tpos;
-                  vec2  V0 = XV0.zw;
-                  float M0 = MC0.x;
-                  vec2 dx = X0 - X;
-                  vec2 dv = V0 - V;
-                  vec2 dsize = clamp(destimator(X0 - tpos, M0), 0.3, 1.0);
-                  float weight = clamp(M0, 0.0, 1.0)*GS(0.8*dx);
-                  rho += M0*weight;
-                  B += mat2(dv*dx.x,dv*dx.y)*weight;
-                  a += weight;
-              }
-              B /= a;
-              rho /= a;
-            
               float drho = rho - 1.0;
               B -= 0.007*mat2(drho)*abs(drho);
              
               //integrate deformation gradient
-               D += 1.*dt*B*D;
+              D += 1.*dt*B*D;
              
               //smoothing
               
@@ -455,13 +402,14 @@ class OccipitalOrdinance {
           }
           
           //save
-          pc_fragColor = vec4(D);
+          X = X - pos;
+          XVOut = clamp(vec4(X, V), -1.0, 1.0);
+          MCOut = vec4(MC.x, clamp(C, 0.0, 1.0), 1.0);
+          DOut = vec4(D);
       }`);
-    Object.assign(this.bufferDPass.material.uniforms, this.uniforms);
-    //this.bufferDPass.material.uniforms["map"] = { value: this.testTexture };
-    this.bufferDPass.material.uniformsNeedUpdate = true;
-    this.bufferDPass.material.needsUpdate = true;
-
+    Object.assign(this.bufferCPass.material.uniforms, this.uniforms);
+    this.bufferCPass.material.uniformsNeedUpdate = true;
+    this.bufferCPass.material.needsUpdate = true;
 
     const error = this.reintegrationComputation.init();
     if ( error !== null ) { console.error( error ); }
