@@ -60,7 +60,7 @@ class OccipitalOrdinance {
             iFrame      : { value: 0 },
             iMouse      : { value: new THREE.Vector3() },
             iChannel0   : { value: null },
-            iChannel1   : { value: null },
+            //iChannel1   : { value: null },
             iResolution : { value: new THREE.Vector2(this.width, this.height) }
           }
 
@@ -99,8 +99,7 @@ class OccipitalOrdinance {
     }
 
     this.reintegrationComputation = new MultiTargetGPUComputationRenderer(this.width, this.height, this.renderer);
-    this.bufferA = this.reintegrationComputation.addVariable("iChannel0", undefined, 2);
-    this.bufferB = this.reintegrationComputation.addVariable("iChannel1");
+    this.bufferA = this.reintegrationComputation.addVariable("iChannel0", undefined, 3);
     this.bufferC = this.reintegrationComputation.addVariable("iChannel2", undefined, 2);
     this.bufferD = this.reintegrationComputation.addVariable("iChannel3");
 
@@ -173,13 +172,14 @@ class OccipitalOrdinance {
           return p-c*clamp(round(p/c),-l,l);
       }`;
 
-    this.bufferAPass = this.reintegrationComputation.addPass(this.bufferA, [this.bufferC/*, this.bufferD*/], `
+    this.bufferAPass = this.reintegrationComputation.addPass(this.bufferA, [this.bufferC, this.bufferD], `
       uniform sampler2D scene;
       uniform float outputResolutionScale;
       `+this.commonFunctions+`
 
       layout(location = 0) out vec4 XVOut;
       layout(location = 1) out vec4 MCOut;
+      layout(location = 2) out vec4 DOut;
 
       // Reintegration tracking
       void main(){
@@ -190,6 +190,10 @@ class OccipitalOrdinance {
           vec2  V = vec2(0);
           float M = 0.;
           vec2  C = vec2(0.);
+
+          // deformation gradient
+          mat2 D = mat2(0);
+
           // basically integral over all updated neighbor distributions
           // that fall inside of this pixel
           // this makes the tracking conservative
@@ -197,11 +201,12 @@ class OccipitalOrdinance {
               vec2 tpos = pos + vec2(i,j);
               vec4 XV = texelFetch(iChannel2[0], ivec2(mod(tpos,R)), 0);
               vec4 MC = texelFetch(iChannel2[1], ivec2(mod(tpos,R)), 0);
-             
+              mat2 D0 = mat2(texelFetch(iChannel3, ivec2(mod(tpos,R)), 0));
+
               vec2 X0 = XV.xy + tpos;
               vec2 V0 = XV.zw;
               
-              //particle distribution size
+              // particle distribution size
               vec2 K = destimator(X0 - tpos , MC.x);
              
               X0 += V0*dt; //integrate position
@@ -210,15 +215,18 @@ class OccipitalOrdinance {
               vec2 center = 0.5*(aabbX.xy + aabbX.zw); //center of mass
               vec2 size = max(aabbX.zw - aabbX.xy, 0.); //only positive
               
-              //the deposited mass into this cell
+              // the deposited mass into this cell
               vec3 m = MC.x*vec3(center, 1.0)*size.x*size.y/(K.x*K.y);
               
-              //add weighted by mass
+              // add weighted by mass
               X += m.xy;
               V += V0*m.z;
               C += m.z*MC.yz;
               //add mass
               M += m.z;
+
+              // add deformation grad weighted by mass
+              D += D0*m.z;
           }
           
           // normalization
@@ -226,8 +234,9 @@ class OccipitalOrdinance {
               X /= M;
               V /= M;
               C /= M;
-          }
-          
+              D /= M;
+          } else { D = mat2(1.0); }
+
           // initial condition
           if(iFrame < 1) {
               X = pos;
@@ -237,79 +246,21 @@ class OccipitalOrdinance {
               M = float(!(sceneT.rgb == vec3(1.0, 0.0, 1.0) || sceneT.rgb == vec3(128.0/255.0, 0.0, 128.0/255.0) || sceneT.rgb == vec3(0.0)));
               
               C = mod(pos/R, 1.);
+
+              D = mat2(1.0);
           }
           
           X = X - pos;
           XVOut = clamp(vec4(X, V), -1.0, 1.0);
           MCOut = vec4(M, clamp(C, 0.0, 1.0), 1.0);
+          DOut  = vec4(D);
       }`);
     Object.assign(this.bufferAPass.material.uniforms, this.uniforms);
     //this.bufferAPass.material.uniforms["map"] = { value: this.testTexture };
     this.bufferAPass.material.uniformsNeedUpdate = true;
     this.bufferAPass.material.needsUpdate = true;
 
-    this.bufferBPass = this.reintegrationComputation.addPass(this.bufferB, [this.bufferC, this.bufferD], `
-      out highp vec4 pc_fragColor;
-      uniform float outputResolutionScale;
-      `+this.commonFunctions+`
-      // deformation gradient advection and update
-      // particle distribution
-      vec3 PD(vec2 x, vec2 pos){ return vec3(x, 1.0)*Ha(x - (pos - 0.5))*Hb((pos + 0.5) - x); }
-      
-      void main() {
-          vec2 pos = gl_FragCoord.xy;// / resolution.xy
-          ivec2 p = ivec2(pos);
-          
-          //deformation gradient
-           mat2 D = mat2(0);
-          float M = 0.;
-          
-          //basically integral over all updated neighbor distributions
-          //that fall inside of this pixel
-          //this makes the tracking conservative
-          range(i, -1, 1) range(j, -1, 1) {
-              vec2 tpos = pos + vec2(i,j);
-              vec4 XV = texelFetch(iChannel2[0], ivec2(mod(tpos,R)), 0);
-              vec4 MC = texelFetch(iChannel2[1], ivec2(mod(tpos,R)), 0);
-
-              vec2 X0 = XV.xy + tpos;
-              vec2 V0 = XV.zw;
-
-              mat2 D0 = mat2(texelFetch(iChannel3, ivec2(mod(tpos,R)), 0));
-                
-              //particle distribution size
-              vec2 K = destimator(X0 - tpos,  MC.x);
-              
-              X0 += V0*dt; //integrate position
-      
-              vec4 aabbX = vec4(max(pos - 0.5, X0 - K*0.5), min(pos + 0.5, X0 + K*0.5)); //overlap aabb
-              vec2 center = 0.5*(aabbX.xy + aabbX.zw); //center of mass
-              vec2 size = max(aabbX.zw - aabbX.xy, 0.); //only positive
-              
-              //the deposited mass into this cell
-              vec3 m = MC.x*vec3(center, 1.0)*size.x*size.y/(K.x*K.y);
-              
-              //add deformation grad weighted by mass
-              D += D0*m.z;
-              
-              //add mass
-              M += m.z;
-          }
-          
-          //normalization
-          if(M != 0.){ D /= M; } else { D = mat2(1.0); }
-          
-          //initial condition
-          if(iFrame < 1) { D = mat2(1.0); }
-      
-          pc_fragColor = vec4(D);
-      }`);
-    Object.assign(this.bufferBPass.material.uniforms, this.uniforms);
-    //this.bufferBPass.material.uniforms["map"] = { value: this.testTexture };
-    this.bufferBPass.material.uniformsNeedUpdate = true;
-    this.bufferBPass.material.needsUpdate = true;
-
-    this.bufferCPass = this.reintegrationComputation.addPass(this.bufferC, [this.bufferA, this.bufferB], `
+    this.bufferCPass = this.reintegrationComputation.addPass(this.bufferC, [this.bufferA], `
       uniform float outputResolutionScale;
       uniform vec3 iMouse;
       `+this.commonFunctions+`
@@ -371,7 +322,7 @@ class OccipitalOrdinance {
           vec4 XV = texelFetch(iChannel0[0], ivec2(mod(pos,R)), 0);
           vec4 MC = texelFetch(iChannel0[1], ivec2(mod(pos,R)), 0);
 
-          mat2  D = mat2(texelFetch(iChannel1, ivec2(mod(pos,R)), 0));
+          mat2  D = mat2(texelFetch(iChannel0[2], ivec2(mod(pos,R)), 0));
           vec2  X = XV.xy + pos;
           vec2  V = XV.zw;
           float M = clamp(MC.x, 0., 2.0);
@@ -399,7 +350,7 @@ class OccipitalOrdinance {
                           float M0 = MC0.x;
                           vec2  dx = X0 - X;
                           vec2  dv = V0 - V;
-                          mat2  D0 = mat2(texelFetch(iChannel1, ivec2(mod(tpos,R)), 0));
+                          mat2  D0 = mat2(texelFetch(iChannel0[2], ivec2(mod(tpos,R)), 0));
                           float weight = GS(0.8*dx);
                          
                           //F += M0*strain((D0*M + D*M0)/(M+M0))*dx*weight;
@@ -441,11 +392,10 @@ class OccipitalOrdinance {
           MCOut = vec4(MC.x, clamp(C, 0.0, 1.0), 1.0);
       }`);
     Object.assign(this.bufferCPass.material.uniforms, this.uniforms);
-    //this.bufferBPass.material.uniforms["map"] = { value: this.testTexture };
     this.bufferCPass.material.uniformsNeedUpdate = true;
     this.bufferCPass.material.needsUpdate = true;
 
-    this.bufferDPass = this.reintegrationComputation.addPass(this.bufferD, [this.bufferA, this.bufferB], `
+    this.bufferDPass = this.reintegrationComputation.addPass(this.bufferD, [this.bufferA], `
       out highp vec4 pc_fragColor;
       uniform float outputResolutionScale;
       `+this.commonFunctions+`
@@ -458,7 +408,7 @@ class OccipitalOrdinance {
           vec4 XV = texelFetch(iChannel0[0], ivec2(mod(pos,R)), 0);
           vec4 MC = texelFetch(iChannel0[1], ivec2(mod(pos,R)), 0);
 
-          mat2  D = mat2(texelFetch(iChannel1, ivec2(mod(pos,R)), 0));
+          mat2  D = mat2(texelFetch(iChannel0[2], ivec2(mod(pos,R)), 0));
           vec2  X = XV.xy + pos;
           vec2  V = XV.zw;
           float M = MC.x;
@@ -541,8 +491,8 @@ class OccipitalOrdinance {
             //gl_Position = vec4( ( uv - 0.5 ) * 2.0, 0.0, 1.0 );
         }`,
       fragmentShader: `
-        uniform sampler2D[2] iChannel0;
-        uniform sampler2D iChannel1, scene, sceneBG, sceneBack;
+        uniform sampler2D[3] iChannel0;
+        uniform sampler2D scene, sceneBG, sceneBack;
         uniform float outputResolutionScale;
         varying vec2 vUv;
 
@@ -577,7 +527,7 @@ class OccipitalOrdinance {
                 float M0 = MC.x;
                 vec2  dx = X0 - pos;
                 vec2 dx0 = X0 - tpos;
-                mat2  D0 = mat2(texelFetch(iChannel1, ivec2(mod(tpos,R)), 0));
+                mat2  D0 = mat2(texelFetch(iChannel0[2], ivec2(mod(tpos,R)), 0));
                 
                 float K = GS(dx/radius)/(radius*radius);
                 rho  += M0*K;
@@ -640,7 +590,6 @@ class OccipitalOrdinance {
       }
 
       this.uniforms["iChannel0"].value = this.reintegrationComputation.getCurrentRenderTarget(this.bufferA).texture;
-      this.uniforms["iChannel1"].value = this.reintegrationComputation.getCurrentRenderTarget(this.bufferB).texture;
     }
 
     this.renderer.render(this.scene, this.camera);
