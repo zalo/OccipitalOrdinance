@@ -12,18 +12,17 @@ class OccipitalOrdinance {
     this.scene = new THREE.Scene();
     this.scene.name = 'Scene';
 
-    this.width  = window.innerWidth;
-    this.height = window.innerHeight;
-
-    this.camera = new THREE.PerspectiveCamera( 35, this.width / this.height, 1.0, 2000.0 );
+    this.camera = new THREE.PerspectiveCamera( 35, window.innerWidth / window.innerHeight, 1.0, 2000.0 );
     this.camera.position.set( 0, 0, 100 );
     this.scene.add(this.camera);
 
-    this.time = 0;
+    this.time   = 0;
+    this.width  = 800;
+    this.height = 450;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, transparent: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(this.width, this.height);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setAnimationLoop(this.render.bind(this));
     this.renderer.setClearAlpha(0.0);
     this.renderer.setClearColor(new THREE.Color(1, 1, 1), 0.0);
@@ -31,28 +30,50 @@ class OccipitalOrdinance {
     this.renderer.domElement.style.zIndex   = '-1000';
     this.container.appendChild(this.renderer.domElement);
 
-    //this.testTexture = texture;
-    //this.testTexture.minFilter = THREE.NearestFilter;
-    //this.testTexture.magFilter = THREE.NearestFilter;
+    this.raycaster = new THREE.Raycaster();
+    this.pointer   = new THREE.Vector3();
 
-    this.uniforms = {
-      outputResolutionScale : { value: 1.0 },
-      iFrame : { value: 0 },
-      iChannel0: { value: null },
-      iResolution: { value: new THREE.Vector2(800, 200) }
-    }
+    new THREE.TextureLoader().load('./assets/Test-Smile.png', (texture) => {
+      this.testTexture = texture;
+      this.testTexture.minFilter = THREE.NearestFilter;
+      this.testTexture.magFilter = THREE.NearestFilter;
+      console.log(this.testTexture);
 
-    this.gui = new GUI()
-    this.gui.add(this.uniforms.outputResolutionScale, 'value',   0.1  ,  1.0      ).name('Resolution Scale')
-      .onChange(() => { this.renderer.setPixelRatio(window.devicePixelRatio * this.uniforms.outputResolutionScale.value); });
-    this.gui.open();
+      this.width  = this.testTexture.source.data.width;
+      this.height = this.testTexture.source.data.height;
 
-    this.createReintegrationSystem(this.uniforms.lineResolution, this.uniforms.angularResolution);
+      this.uniforms = {
+        scene       : { value: this.testTexture },
+        outputResolutionScale : { value: 1.0 },
+        iterations  : { value: 32 },
+        iFrame      : { value: 0 },
+        iMouse      : { value: new THREE.Vector3() },
+        iChannel0   : { value: null },
+        iChannel1   : { value: null },
+        iResolution : { value: new THREE.Vector2(this.width, this.height) }
+      }
+
+      this.gui = new GUI()
+      this.gui.add(this.uniforms.iterations, 'value', 1,  64).name('Iterations Per Frame');
+      this.gui.add(this.uniforms.outputResolutionScale, 'value', 0.1,  1.0).name('Resolution Scale')
+        .onChange(() => { this.renderer.setPixelRatio(window.devicePixelRatio * this.uniforms.outputResolutionScale.value); });
+      this.gui.open();
+
+      this.createReintegrationSystem();
+    });
 
     window.addEventListener('resize', this.resize.bind(this));
+    window.addEventListener('pointermove', this.onPointerMove.bind(this));
+    window.addEventListener('pointerdown', ()=>{ this.pointer.z = 1.0; });
+    window.addEventListener('pointerup'  , ()=>{ this.pointer.z = 0.0; });
     this.resize();
 
     this.lastTime = this.time;
+  }
+
+  onPointerMove( event ) {
+    this.pointer.x =   ( event.clientX / window.innerWidth  ) * 2 - 1;
+    this.pointer.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
   }
 
   createReintegrationSystem() {
@@ -64,7 +85,7 @@ class OccipitalOrdinance {
       this.reprojectionMaterial.dispose();
     }
 
-    this.reintegrationComputation = new MultiTargetGPUComputationRenderer(800, 450, this.renderer);
+    this.reintegrationComputation = new MultiTargetGPUComputationRenderer(this.width, this.height, this.renderer);
     this.bufferA = this.reintegrationComputation.addVariable("iChannel0");
     this.bufferB = this.reintegrationComputation.addVariable("iChannel1");
     this.bufferC = this.reintegrationComputation.addVariable("iChannel2");
@@ -155,19 +176,10 @@ class OccipitalOrdinance {
 
     this.bufferAPass = this.reintegrationComputation.addPass(this.bufferA, [this.bufferC, this.bufferD], `
       out highp vec4 pc_fragColor;
-      //uniform sampler2D map;
+      uniform sampler2D scene;
       uniform float outputResolutionScale;
       `+this.commonFunctions+`
       // Reintegration tracking
-      float particleBox (vec2 x, vec2 s) { return float(sdBox(x, s) < 0.); }
-      float particleArch(vec2 x, vec2 s) { return float(opSubtraction(sdBox(x + vec2(0, s.y*0.4), s*vec2(0.5, 0.9)), sdBox(x, s)) < 0.); }
-      float Building(vec2 x, vec2 s) {
-          vec2 room_s = s.y*vec2(0.12);
-          vec2  rep_s = vec2(0.15)*s.x;
-          float rooms = sdBox(opRepLim(x + vec2(0., -0.1*room_s.y), rep_s, vec2(30.0)), room_s);
-          float    sd = opSubtraction(rooms, sdBox(x, s));
-          return float(sd < 0.);
-      }
       void main(){
           vec2 pos = gl_FragCoord.xy;// / resolution.xy
           ivec2 p = ivec2(pos);
@@ -218,11 +230,11 @@ class OccipitalOrdinance {
           if(iFrame < 1) {
               X = pos;
               V = vec2(0.);
-              M = max(max(Building(X - R*vec2(0.5,0.32), R*vec2(0.4,0.3)),
-                  particleBox(X - R*vec2(0.1,0.9), R*vec2(0.0))), 
-                      particleBox(X - R*vec2(0.5,0.12), R*vec2(0.47, 0.1)));
+
+              vec4 sceneT = texelFetch(scene, ivec2(p), 0);
+              M = float(!(sceneT.rgb == vec3(1.0, 0.0, 1.0) || sceneT.rgb == vec3(128.0/255.0, 0.0, 128.0/255.0) || sceneT.rgb == vec3(0.0)));
               
-              C = mod(3.*pos/R, 1.);
+              C = mod(pos/R, 1.);
           }
           
           X = X - pos;
@@ -297,13 +309,14 @@ class OccipitalOrdinance {
       out highp vec4 pc_fragColor;
       //uniform sampler2D map;
       uniform float outputResolutionScale;
+      uniform vec3 iMouse;
       `+this.commonFunctions+`
       //velocity update
 
       float border(vec2 p) {
-          float bound = -sdBox( p - R*0.5             , R*vec2(0.48, 0.48)); 
-          float box   =  sdBox((p - R*vec2(0.5, 0.6)) , R*vec2(0.05, 0.01));
-          float drain = -sdBox( p - R*vec2(0.5, 0.7)  , R*vec2(0.0 , 0.0 ));
+          float bound = -sdBox( p - R*0.5            , R*vec2(0.5, 0.495)); // <--- USED TO BE .48,.48 
+          float box   =  sdBox((p - R*vec2(0.5, 0.6)), R*vec2(0.05, 0.01));
+          float drain = -sdBox( p - R*vec2(0.5, 0.7) , R*vec2(0.0 , 0.0 ));
           return bound;
       }
       
@@ -392,14 +405,14 @@ class OccipitalOrdinance {
                   F /= b;
                   F = clamp(F, -0.4,0.4);
               }
-              //if(iMouse.z > 0.)
-              //{
-              //    vec2 dx= pos - iMouse.xy;
-              //    F += 0.02*normalize2(dx)*GS(dx/80.);
-              //}
+              if(iMouse.z > 0.)
+              {
+                  vec2 dx= pos - iMouse.xy;
+                  F += 0.01*normalize2(dx)*GS(dx/80.);
+              }
               
               //gravity
-              F += 0.001*vec2(0,-1);
+              F += 0.0001*vec2(0,-1);
               
               //integrate velocity
               V += F*dt;
@@ -493,14 +506,14 @@ class OccipitalOrdinance {
     const error = this.reintegrationComputation.init();
     if ( error !== null ) { console.error( error ); }
 
-    //console.log(this.isovistComputation.getCurrentRenderTarget(this.isovist));
-    this.labelMaterial = new THREE.MeshBasicMaterial( 
-      { map: this.reintegrationComputation.getCurrentRenderTarget(this.bufferA).texture, side: THREE.DoubleSide });
-    this.labelPlane = new THREE.PlaneGeometry(50, 50);
-    this.labelMesh = new THREE.Mesh(this.labelPlane, this.labelMaterial);
-    this.labelMesh.position.set(25, 0, 0);
-    this.labelMesh.scale   .set(1, 1, 1);
-    this.scene.add(this.labelMesh);
+    ////console.log(this.isovistComputation.getCurrentRenderTarget(this.isovist));
+    //this.labelMaterial = new THREE.MeshBasicMaterial( 
+    //  { map: this.reintegrationComputation.getCurrentRenderTarget(this.bufferB).texture, side: THREE.DoubleSide });
+    //this.labelPlane = new THREE.PlaneGeometry(50, 50);
+    //this.labelMesh = new THREE.Mesh(this.labelPlane, this.labelMaterial);
+    //this.labelMesh.position.set(25, 0, 0);
+    //this.labelMesh.scale   .set(1, this.height/this.width, 1);
+    //this.scene.add(this.labelMesh);
 
     //this.uniforms["isovist"] = { value: null };
     //this.uniforms["map"]     = { value: this.testTexture };
@@ -518,7 +531,7 @@ class OccipitalOrdinance {
             //gl_Position = vec4( ( uv - 0.5 ) * 2.0, 0.0, 1.0 );
         }`,
       fragmentShader: `
-        uniform sampler2D iChannel0, iChannel1;
+        uniform sampler2D iChannel0, iChannel1, scene;
         uniform float outputResolutionScale;
         varying vec2 vUv;
 
@@ -533,7 +546,7 @@ class OccipitalOrdinance {
         #define zoom 0.2
         
         void main() {
-            vec2 pos = vec2(vUv.x * 800.0, vUv.y * 480.0);
+            vec2 pos = vec2(vUv.x * iResolution.x, vUv.y * iResolution.y);
             float rho = 0.001;
             vec2 c = vec2(0.);
             float De = 0.;
@@ -567,31 +580,27 @@ class OccipitalOrdinance {
             }
         
           grad /= rho; 
-          c /= rho;
-          vel /= rho;
-          De /= rho;
-            
-          //vec3 vc = hsv2rgb(vec3(6.*atan(vel.x, vel.y)/(2.*PI), 1.0, rho*length(vel.xy)));
+          c    /= rho;
+          vel  /= rho;
+          De   /= rho;
+
           float d = smoothstep(0.3,0.7,mix(rho, rho2,1.0));
-          gl_FragColor.rgb = mix(vec3(0.), 5.*vec3(0,0.5,1.0)*De*De + 0.04*rho2, d);
-          gl_FragColor.rgb = sqrt(gl_FragColor.rgb);
+          gl_FragColor.rgb = vec3(0,0.5,1.0)*De*De + 0.04*rho2 + texture(scene, c).xyz;
+          gl_FragColor.rgb = mix(vec3(0.), gl_FragColor.rgb, d);
           gl_FragColor.a = 1.0;
-          //gl_FragColor.rgb = vec3(rho2)*0.2;
         }`
     });
   
-    this.reintegrationMesh = new THREE.Mesh( new THREE.PlaneGeometry( 50, 50 ), this.reprojectionMaterial );
-    this.reintegrationMesh.position.set(-25, 0, 0);
-    this.reintegrationMesh.scale   .set(1, 1, 1);
+    this.reintegrationMesh = new THREE.Mesh( new THREE.PlaneGeometry( 80, 80 ), this.reprojectionMaterial );
+    this.reintegrationMesh.position.set(0, 0, 0);
+    this.reintegrationMesh.scale   .set(1, this.height/this.width, 1);
     this.scene.add(this.reintegrationMesh);
   }
 
   resize() {
-    this.width  = window.innerWidth;
-    this.height = window.innerHeight;
-    this.camera.aspect = this.width / this.height;
+    this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize( this.width, this.height);
+    this.renderer.setSize( window.innerWidth, window.innerHeight);
     this.lastTime=this.time;
   }
 
@@ -600,17 +609,24 @@ class OccipitalOrdinance {
     if (this.time == 0) { this.lastTime = this.time; }
 
     if (this.reintegrationComputation) {
-      for(let i = 0; i < 32; i++){
+      this.raycaster.setFromCamera( this.pointer, this.camera );
+      let intersects = this.raycaster.intersectObjects( [this.reintegrationMesh] );
+      if(intersects.length > 0) { 
+        this.uniforms["iMouse"].value = new THREE.Vector3(
+          intersects[0].uv.x * this.width, 
+          intersects[0].uv.y * this.height, this.pointer.z);
+      }
+
+      for(let i = 0; i < this.uniforms.iterations.value; i++){
         this.reintegrationComputation.compute();
         this.uniforms["iFrame"].value += 1;
       }
 
       this.uniforms["iChannel0"].value = this.reintegrationComputation.getCurrentRenderTarget(this.bufferA).texture;
+      this.uniforms["iChannel1"].value = this.reintegrationComputation.getCurrentRenderTarget(this.bufferB).texture;
     }
 
     this.renderer.render(this.scene, this.camera);
-
-    
   }
 }
 
