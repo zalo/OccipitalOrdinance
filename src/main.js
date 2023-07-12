@@ -99,18 +99,14 @@ class OccipitalOrdinance {
     }
 
     this.reintegrationComputation = new MultiTargetGPUComputationRenderer(this.width, this.height, this.renderer);
-    this.bufferA = this.reintegrationComputation.addVariable("iChannel0");
+    this.bufferA = this.reintegrationComputation.addVariable("iChannel0", undefined, 2);
     this.bufferB = this.reintegrationComputation.addVariable("iChannel1");
-    this.bufferC = this.reintegrationComputation.addVariable("iChannel2");
+    this.bufferC = this.reintegrationComputation.addVariable("iChannel2", undefined, 2);
     this.bufferD = this.reintegrationComputation.addVariable("iChannel3");
 
     this.commonFunctions = `
       uniform vec2 iResolution;
       uniform int iFrame;
-      #define T0(p) texelFetch(iChannel0, ivec2(mod(p,R)), 0)
-      #define T1(p) texelFetch(iChannel1, ivec2(mod(p,R)), 0)
-      #define T2(p) texelFetch(iChannel2, ivec2(mod(p,R)), 0)
-      #define T3(p) texelFetch(iChannel3, ivec2(mod(p,R)), 0)
       #define P(p) texture(iChannel0, mod(p,R)/R)
       #define C(p) texture(iChannel1, mod(p,R)/R)
       #define PI 3.14159265
@@ -187,33 +183,38 @@ class OccipitalOrdinance {
       #define DECODE(X) UNPACK(floatBitsToUint(X))
       #define ENCODE(X) uintBitsToFloat(PACK(X))`;
 
-    this.bufferAPass = this.reintegrationComputation.addPass(this.bufferA, [this.bufferC, this.bufferD], `
+    this.bufferAPass = this.reintegrationComputation.addPass(this.bufferA, [this.bufferC/*, this.bufferD*/], `
       out highp vec4 pc_fragColor;
       uniform sampler2D scene;
       uniform float outputResolutionScale;
       `+this.commonFunctions+`
+
+      layout(location = 0) out vec4 XVOut;
+      layout(location = 1) out vec4 MCOut;
+
       // Reintegration tracking
       void main(){
           vec2 pos = gl_FragCoord.xy;// / resolution.xy
-          ivec2 p = ivec2(pos);
+          ivec2 p  = ivec2(pos);
           
-          vec2 X = vec2(0);
-          vec2 V = vec2(0);
+          vec2  X = vec2(0);
+          vec2  V = vec2(0);
           float M = 0.;
-          vec2 C = vec2(0.);
-          //basically integral over all updated neighbor distributions
-          //that fall inside of this pixel
-          //this makes the tracking conservative
-          range(i, -1, 1) range(j, -1, 1)
-          {
+          vec2  C = vec2(0.);
+          // basically integral over all updated neighbor distributions
+          // that fall inside of this pixel
+          // this makes the tracking conservative
+          range(i, -1, 1) range(j, -1, 1) {
               vec2 tpos = pos + vec2(i,j);
-              vec4 data = T2(tpos);
+              //vec4 data = texelFetch(iChannel2, ivec2(mod(tpos,R)), 0);
+              vec4 XV = texelFetch(iChannel2[0], ivec2(mod(tpos,R)), 0);
+              vec4 MC = texelFetch(iChannel2[1], ivec2(mod(tpos,R)), 0);
              
-              vec2 X0 = DECODE(data.x) + tpos;
-              vec2 V0 = DECODE(data.y);
+              vec2 X0 = XV.xy + tpos;
+              vec2 V0 = XV.zw;
               
               //particle distribution size
-              vec2 K = destimator(X0 - tpos , data.z);
+              vec2 K = destimator(X0 - tpos , MC.x);
              
               X0 += V0*dt; //integrate position
               
@@ -222,12 +223,12 @@ class OccipitalOrdinance {
               vec2 size = max(aabbX.zw - aabbX.xy, 0.); //only positive
               
               //the deposited mass into this cell
-              vec3 m = data.z*vec3(center, 1.0)*size.x*size.y/(K.x*K.y);
+              vec3 m = MC.x*vec3(center, 1.0)*size.x*size.y/(K.x*K.y);
               
               //add weighted by mass
               X += m.xy;
               V += V0*m.z;
-              C += m.z*DECODE(data.w);
+              C += m.z*MC.yz;
               //add mass
               M += m.z;
           }
@@ -251,7 +252,8 @@ class OccipitalOrdinance {
           }
           
           X = X - pos;
-          pc_fragColor = vec4(ENCODE(X), ENCODE(V), M, ENCODE(C));
+          XVOut = vec4(X, V);
+          MCOut = vec4(M, C, 0.0);
       }`);
     Object.assign(this.bufferAPass.material.uniforms, this.uniforms);
     //this.bufferAPass.material.uniforms["map"] = { value: this.testTexture };
@@ -280,11 +282,11 @@ class OccipitalOrdinance {
           //this makes the tracking conservative
           range(i, -1, 1) range(j, -1, 1) {
               vec2 tpos = pos + vec2(i,j);
-              vec4 data = T2(tpos);
+              vec4 data = texelFetch(iChannel2, ivec2(mod(tpos,R)), 0);
              
               vec2 X0 = DECODE(data.x) + tpos;
               vec2 V0 = DECODE(data.y);
-              mat2 D0 = mat2(T3(tpos));
+              mat2 D0 = mat2(texelFetch(iChannel3, ivec2(mod(tpos,R)), 0));
                 
               //particle distribution size
               vec2 K = destimator(X0 - tpos,  data.z);
@@ -371,20 +373,25 @@ class OccipitalOrdinance {
           return volume * stress;
       }
       
+      layout(location = 0) out vec4 XVOut;
+      layout(location = 1) out vec4 MCOut;
+
       void main() {
           vec2 pos = gl_FragCoord.xy;// / resolution.xy
           vec2 uv = pos/R;
           ivec2 p = ivec2(pos);
-              
-          vec4 data = T0(pos); 
-          mat2 D = mat2(T1(pos));
-          vec2 X = DECODE(data.x) + pos;
-          vec2 V = DECODE(data.y);
-          float M = clamp(data.z, 0., 2.0);
-          vec2 C = DECODE(data.w);
-          if(M>0.0) //not vacuum
-          {
-              //Compute the force
+
+          vec4 XV = texelFetch(iChannel0[0], ivec2(mod(pos,R)), 0);
+          vec4 MC = texelFetch(iChannel0[1], ivec2(mod(pos,R)), 0);
+
+          mat2  D = mat2(texelFetch(iChannel1, ivec2(mod(pos,R)), 0));
+          vec2  X = XV.xy + pos;
+          vec2  V = XV.zw;
+          float M = clamp(MC.x, 0., 2.0);
+          vec2  C = MC.yz;
+          // not vacuum
+          if (M > 0.0) {
+              // Compute the force
             
               vec2 F = vec2(0.);
               float b = 0.;
@@ -397,14 +404,15 @@ class OccipitalOrdinance {
                       if(!(i == 0 && j == 0))
                       {
                           vec2 tpos = pos + vec2(i,j);
-                          vec4 data = T0(tpos);
-      
-                          vec2 X0 = 0.*DECODE(data.x) + tpos;
-                          vec2 V0 = DECODE(data.y);
-                          float M0 = data.z;
-                          vec2 dx = X0 - X;
-                          vec2 dv = V0 - V;
-                          mat2 D0 = mat2(T1(tpos));
+                          vec4 XV0 = texelFetch(iChannel0[0], ivec2(mod(pos,R)), 0);
+                          vec4 MC0 = texelFetch(iChannel0[1], ivec2(mod(pos,R)), 0);
+
+                          vec2  X0 = 0.*XV.xy + tpos; // INVESTIGATE WHY THIS IS MULTIPLIED BY 0.0
+                          vec2  V0 = XV.zw;
+                          float M0 = MC.x;
+                          vec2  dx = X0 - X;
+                          vec2  dv = V0 - V;
+                          mat2  D0 = mat2(texelFetch(iChannel1, ivec2(mod(tpos,R)), 0));
                           float weight = GS(0.8*dx);
                          
                           //F += M0*strain((D0*M + D*M0)/(M+M0))*dx*weight;
@@ -442,7 +450,8 @@ class OccipitalOrdinance {
           
           //save
           X = X - pos;
-          pc_fragColor = vec4(ENCODE(X), ENCODE(V), data.z, ENCODE(C));
+          XVOut = vec4(X, V);
+          MCOut = vec4(M, C, 0.0);
       }`);
     Object.assign(this.bufferCPass.material.uniforms, this.uniforms);
     //this.bufferBPass.material.uniforms["map"] = { value: this.testTexture };
@@ -465,7 +474,7 @@ class OccipitalOrdinance {
           vec2 V = DECODE(data.y);
           float M = data.z;
           float C = data.w;
-          mat2 D = mat2(T1(pos));
+          mat2 D = mat2(texelFetch(iChannel1, ivec2(mod(pos,R)), 0));
           
           if(M > 0.01) //not vacuum
           {
@@ -578,7 +587,7 @@ class OccipitalOrdinance {
                 float M0 = data.z;
                 vec2 dx = X0 - pos;
                 vec2 dx0 = X0 - tpos;
-                mat2 D0 = mat2(T1(tpos));
+                mat2 D0 = mat2(texelFetch(iChannel1, ivec2(mod(tpos,R)), 0));
                 
                 float K = GS(dx/radius)/(radius*radius);
                 rho += M0*K;
