@@ -30,7 +30,7 @@ class OccipitalOrdinance {
     this.renderer.domElement.style.zIndex   = '-1000';
     this.container.appendChild(this.renderer.domElement);
     this.container.style.touchAction = "none";
-    this.container.style.userSelect = "none";
+    this.container.style.userSelect  = "none";
 
     this.raycaster = new THREE.Raycaster();
     this.pointer   = new THREE.Vector3();
@@ -38,13 +38,13 @@ class OccipitalOrdinance {
     new THREE.TextureLoader().load('./assets/Back.bmp', (backTexture) => {
       new THREE.TextureLoader().load('./assets/Test-BG.png', (bgTexture) => {
         new THREE.TextureLoader().load('./assets/Test-FG.png', (texture) => {
-          this.testTexture = texture;
-          this.testTexture.minFilter = THREE.NearestFilter;
-          this.testTexture.magFilter = THREE.NearestFilter;
-          this.testTextureBG = bgTexture;
-          this.testTextureBG.minFilter = THREE.NearestFilter;
-          this.testTextureBG.magFilter = THREE.NearestFilter;
-          this.testTextureBack = backTexture;
+          this.testTexture               = texture;
+          this.testTexture.minFilter     = THREE.NearestFilter;
+          this.testTexture.magFilter     = THREE.NearestFilter;
+          this.testTextureBG             = bgTexture;
+          this.testTextureBG.minFilter   = THREE.NearestFilter;
+          this.testTextureBG.magFilter   = THREE.NearestFilter;
+          this.testTextureBack           = backTexture;
           this.testTextureBack.minFilter = THREE.NearestFilter;
           this.testTextureBack.magFilter = THREE.NearestFilter;
 
@@ -107,7 +107,7 @@ class OccipitalOrdinance {
     this.commonFunctions = `
       uniform vec2 iResolution;
       uniform int iFrame;
-      #define T(p) texelFetch(iChannel0, ivec2(mod(p,R)), 0)
+      #define T0(p) texelFetch(iChannel0, ivec2(mod(p,R)), 0)
       #define T1(p) texelFetch(iChannel1, ivec2(mod(p,R)), 0)
       #define T2(p) texelFetch(iChannel2, ivec2(mod(p,R)), 0)
       #define T3(p) texelFetch(iChannel3, ivec2(mod(p,R)), 0)
@@ -376,7 +376,7 @@ class OccipitalOrdinance {
           vec2 uv = pos/R;
           ivec2 p = ivec2(pos);
               
-          vec4 data = T(pos); 
+          vec4 data = T0(pos); 
           mat2 D = mat2(T1(pos));
           vec2 X = DECODE(data.x) + pos;
           vec2 V = DECODE(data.y);
@@ -397,7 +397,7 @@ class OccipitalOrdinance {
                       if(!(i == 0 && j == 0))
                       {
                           vec2 tpos = pos + vec2(i,j);
-                          vec4 data = T(tpos);
+                          vec4 data = T0(tpos);
       
                           vec2 X0 = 0.*DECODE(data.x) + tpos;
                           vec2 V0 = DECODE(data.y);
@@ -460,7 +460,7 @@ class OccipitalOrdinance {
           vec2 pos = gl_FragCoord.xy;// / resolution.xy
           ivec2 p = ivec2(pos);
               
-          vec4 data = T(pos); 
+          vec4 data = T0(pos); 
           vec2 X = DECODE(data.x) + pos;
           vec2 V = DECODE(data.y);
           float M = data.z;
@@ -476,7 +476,7 @@ class OccipitalOrdinance {
               range(i, -2, 2) range(j, -2, 2)
               {
                   vec2 tpos = pos + vec2(i,j);
-                  vec4 data = T(tpos);
+                  vec4 data = T0(tpos);
       
                   vec2 X0 = DECODE(data.x) + tpos;
                   vec2 V0 = DECODE(data.y);
@@ -571,7 +571,7 @@ class OccipitalOrdinance {
             range(i, -2, 2) range(j, -2, 2)
             {
                 vec2 tpos = floor(pos) + vec2(i,j);
-                vec4 data = T(tpos);
+                vec4 data = T0(tpos);
         
                 vec2 X0 = DECODE(data.x) + tpos;
                 vec2 V0 = DECODE(data.y);
