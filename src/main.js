@@ -35,33 +35,44 @@ class OccipitalOrdinance {
     this.raycaster = new THREE.Raycaster();
     this.pointer   = new THREE.Vector3();
 
-    new THREE.TextureLoader().load('./assets/Test-Smile.png', (texture) => {
-      this.testTexture = texture;
-      this.testTexture.minFilter = THREE.NearestFilter;
-      this.testTexture.magFilter = THREE.NearestFilter;
-      console.log(this.testTexture);
+    new THREE.TextureLoader().load('./assets/Back.bmp', (backTexture) => {
+      new THREE.TextureLoader().load('./assets/Test-BG.png', (bgTexture) => {
+        new THREE.TextureLoader().load('./assets/Test-FG.png', (texture) => {
+          this.testTexture = texture;
+          this.testTexture.minFilter = THREE.NearestFilter;
+          this.testTexture.magFilter = THREE.NearestFilter;
+          this.testTextureBG = bgTexture;
+          this.testTextureBG.minFilter = THREE.NearestFilter;
+          this.testTextureBG.magFilter = THREE.NearestFilter;
+          this.testTextureBack = backTexture;
+          this.testTextureBack.minFilter = THREE.NearestFilter;
+          this.testTextureBack.magFilter = THREE.NearestFilter;
 
-      this.width  = this.testTexture.source.data.width;
-      this.height = this.testTexture.source.data.height;
+          this.width  = this.testTexture.source.data.width;
+          this.height = this.testTexture.source.data.height;
 
-      this.uniforms = {
-        scene       : { value: this.testTexture },
-        outputResolutionScale : { value: 1.0 },
-        iterations  : { value: 32 },
-        iFrame      : { value: 0 },
-        iMouse      : { value: new THREE.Vector3() },
-        iChannel0   : { value: null },
-        iChannel1   : { value: null },
-        iResolution : { value: new THREE.Vector2(this.width, this.height) }
-      }
+          this.uniforms = {
+            scene       : { value: this.testTexture },
+            sceneBG     : { value: this.testTextureBG },
+            sceneBack   : { value: this.testTextureBack },
+            outputResolutionScale : { value: 1.0 },
+            iterations  : { value: 32 },
+            iFrame      : { value: 0 },
+            iMouse      : { value: new THREE.Vector3() },
+            iChannel0   : { value: null },
+            iChannel1   : { value: null },
+            iResolution : { value: new THREE.Vector2(this.width, this.height) }
+          }
 
-      this.gui = new GUI()
-      this.gui.add(this.uniforms.iterations, 'value', 1,  64).name('Iterations Per Frame');
-      this.gui.add(this.uniforms.outputResolutionScale, 'value', 0.1,  1.0).name('Resolution Scale')
-        .onChange(() => { this.renderer.setPixelRatio(window.devicePixelRatio * this.uniforms.outputResolutionScale.value); });
-      this.gui.open();
+          this.gui = new GUI()
+          this.gui.add(this.uniforms.iterations, 'value', 1,  64).name('Iterations Per Frame');
+          this.gui.add(this.uniforms.outputResolutionScale, 'value', 0.1,  1.0).name('Resolution Scale')
+            .onChange(() => { this.renderer.setPixelRatio(window.devicePixelRatio * this.uniforms.outputResolutionScale.value); });
+          this.gui.open();
 
-      this.createReintegrationSystem();
+          this.createReintegrationSystem();
+        });
+      });
     });
 
     window.addEventListener('resize', this.resize.bind(this));
@@ -533,7 +544,7 @@ class OccipitalOrdinance {
             //gl_Position = vec4( ( uv - 0.5 ) * 2.0, 0.0, 1.0 );
         }`,
       fragmentShader: `
-        uniform sampler2D iChannel0, iChannel1, scene;
+        uniform sampler2D iChannel0, iChannel1, scene, sceneBG, sceneBack;
         uniform float outputResolutionScale;
         varying vec2 vUv;
 
@@ -587,8 +598,13 @@ class OccipitalOrdinance {
           De   /= rho;
 
           float d = smoothstep(0.3,0.7,mix(rho, rho2,1.0));
-          gl_FragColor.rgb = vec3(0,0.5,1.0)*De*De + 0.04*rho2 + texture(scene, c).xyz;
-          gl_FragColor.rgb = mix(vec3(0.), gl_FragColor.rgb, d);
+          gl_FragColor.rgb = vec3(0.0,0.5,1.0)*De*De + 0.04*rho2 + texture(scene, c).xyz; //
+
+          vec3 background = texture(sceneBG, vUv).rgb;
+          vec3 skyBackground = texture(sceneBack, vUv).rgb;
+          background = (background == vec3(1.0, 0.0, 1.0)) ? skyBackground : background;
+
+          gl_FragColor.rgb = mix(background, gl_FragColor.rgb, d);
           gl_FragColor.a = 1.0;
         }`
     });
