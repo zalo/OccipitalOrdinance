@@ -22,4 +22,3 @@ If building manually, make sure to edit the index .html to point from `"./src/ma
 
  # Dependencies
  - [three.js](https://github.com/mrdoob/three.js/) (3D Rendering Engine)
- - [esbuild](https://github.com/evanw/esbuild/) (Bundler)
