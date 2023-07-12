@@ -417,7 +417,7 @@ class MultiTargetGPUComputationRenderer {
 
             passThruUniforms.passThruTexture.value = input;
 
-            if (output.isWebGLMultipleRenderTargets) {
+            if (output.isWebGLMultipleRenderTargets && input) {
 
                 let multiPassthroughShader = createShaderMaterial(`
                 layout(location = 0) out highp vec4 tex0;
