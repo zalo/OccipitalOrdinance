@@ -3,7 +3,7 @@ name: Build Site
 on:
   push:
     branches:
-      - feat-line-sweep
+      - main
 
 jobs:
   test:

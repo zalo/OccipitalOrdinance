@@ -9,7 +9,7 @@
       <img src="https://img.shields.io/github/license/zalo/OccipitalOrdinance" title="License: Apache V2"></a> -->
 </p>
 
-A tribute to Cortex Command; re-rendering one of the levels using [Neohookean MLS-MPM by Mykhailo Moroz](https://www.shadertoy.com/view/wdGcRK).
+May eventually be a tribute to Cortex Command; re-rendering one of the levels using [Neohookean MLS-MPM by Mykhailo Moroz](https://www.shadertoy.com/view/wdGcRK).
 
  # Building
 
