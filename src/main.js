@@ -171,15 +171,7 @@ class OccipitalOrdinance {
       float opSubtraction( float d1, float d2 ) { return max(-d1,d2); }
       vec2 opRepLim(in vec2 p, in vec2 c, in vec2 l){
           return p-c*clamp(round(p/c),-l,l);
-      }
-      //data packing
-      #define PACK(X) ( uint(round(65534.0*clamp(0.5*X.x+0.5, 0., 1.))) + \
-                65535u*uint(round(65534.0*clamp(0.5*X.y+0.5, 0., 1.))) )   
-                    
-      #define UNPACK(X) (clamp(vec2(X%65535u, X/65535u)/65534.0, 0.,1.)*2.0 - 1.0)              
-      
-      #define DECODE(X) UNPACK(floatBitsToUint(X))
-      #define ENCODE(X) uintBitsToFloat(PACK(X))`;
+      }`;
 
     this.bufferAPass = this.reintegrationComputation.addPass(this.bufferA, [this.bufferC/*, this.bufferD*/], `
       uniform sampler2D scene;
@@ -249,7 +241,7 @@ class OccipitalOrdinance {
           
           X = X - pos;
           XVOut = vec4(X, V);
-          MCOut = vec4(M, C, 0.0);
+          MCOut = vec4(M, C, 1.0);
       }`);
     Object.assign(this.bufferAPass.material.uniforms, this.uniforms);
     //this.bufferAPass.material.uniforms["map"] = { value: this.testTexture };
@@ -446,7 +438,7 @@ class OccipitalOrdinance {
           //save
           X = X - pos;
           XVOut = vec4(X, V);
-          MCOut = vec4(M, C, 0.0);
+          MCOut = vec4(M, C, 1.0);
       }`);
     Object.assign(this.bufferCPass.material.uniforms, this.uniforms);
     //this.bufferBPass.material.uniforms["map"] = { value: this.testTexture };

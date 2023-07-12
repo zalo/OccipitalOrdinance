@@ -417,21 +417,42 @@ class MultiTargetGPUComputationRenderer {
 
             passThruUniforms.passThruTexture.value = input;
 
-            if (output.isWebGLMultipleRenderTargets && input) {
+            if (output.isWebGLMultipleRenderTargets) {
 
-                let multiPassthroughShader = createShaderMaterial(`
-                layout(location = 0) out highp vec4 tex0;
-                layout(location = 1) out highp vec4 tex1;
-                layout(location = 2) out highp vec4 tex2;
-                layout(location = 3) out highp vec4 tex3;
-                uniform sampler2D[4] passThruTexture;
-                void main() {
-                    vec2 uv = gl_FragCoord.xy / resolution.xy;
-                    tex0 = texture2D( passThruTexture[0], uv );
-                    tex1 = texture2D( passThruTexture[1], uv );
-                    tex2 = texture2D( passThruTexture[2], uv );
-                    tex3 = texture2D( passThruTexture[3], uv );
-                }`, passThruUniforms)
+                let multiPassthroughShader = null;
+                if( input ) {
+
+                    multiPassthroughShader = createShaderMaterial(`
+                        layout(location = 0) out highp vec4 tex0;
+                        layout(location = 1) out highp vec4 tex1;
+                        layout(location = 2) out highp vec4 tex2;
+                        layout(location = 3) out highp vec4 tex3;
+                        uniform sampler2D[4] passThruTexture;
+                        void main() {
+                            vec2 uv = gl_FragCoord.xy / resolution.xy;
+                            tex0 = texture2D( passThruTexture[0], uv );
+                            tex1 = texture2D( passThruTexture[1], uv );
+                            tex2 = texture2D( passThruTexture[2], uv );
+                            tex3 = texture2D( passThruTexture[3], uv );
+                        }`, passThruUniforms);
+
+                } else {
+
+                    multiPassthroughShader = createShaderMaterial(`
+                        layout(location = 0) out highp vec4 tex0;
+                        layout(location = 1) out highp vec4 tex1;
+                        layout(location = 2) out highp vec4 tex2;
+                        layout(location = 3) out highp vec4 tex3;
+                        uniform sampler2D[4] passThruTexture;
+                        void main() {
+                            tex0 = vec4(0.0, 0.0, 0.0, 1.0);
+                            tex1 = vec4(0.0, 0.0, 0.0, 1.0);
+                            tex2 = vec4(0.0, 0.0, 0.0, 1.0);
+                            tex3 = vec4(0.0, 0.0, 0.0, 1.0);
+                        }`, passThruUniforms);
+
+                }
+
                 this.doRenderTarget(multiPassthroughShader, output);
             } else {
                 this.doRenderTarget(passThruShader, output);
