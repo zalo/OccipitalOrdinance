@@ -326,15 +326,17 @@ class OccipitalOrdinance {
 
           // not vacuum
           if (M > 0.0) {
+
+              // Compute the velocity gradient matrix
+              float a = 0.01;
+              mat2 B = mat2(0.);
+              float rho = 0.;
+
               // Compute the force
               vec2 F = vec2(0.);
               float b = 0.;
 
               mat2 local_strain = strain(D);
-
-              //Compute the velocity gradient matrix
-              mat2 B = mat2(0.);
-              float rho = 0.;
 
               range(i, -2,2) range(j, -2, 2) {
                 vec2 tpos = pos + vec2(i,j);
@@ -348,21 +350,22 @@ class OccipitalOrdinance {
                 vec2  dv = V0 - V;
                 mat2  D0 = mat2(texelFetch(iChannel0[2], ivec2(mod(tpos,R)), 0));
 
-                float weight = clamp(M0, 0.0, 1.0)*GS(0.8*dx);
-
                 if(!(i == 0 && j == 0)) {
-                    //F += M0*strain((D0*M + D*M0)/(M+M0))*dx*weight;
-                    mat2 strain0 = (M0*strain(D0) + M*local_strain)/(M0+M) + mat2(2.4*dot(dx,dv));
-                    F += M0*strain0*dx*weight;
+                  float weight = GS(0.8*dx);
+                  //F += M0*strain((D0*M + D*M0)/(M+M0))*dx*weight;
+                  mat2 strain0 = (M0*strain(D0) + M*local_strain)/(M0+M) + mat2(2.4*dot(dx,dv));
+                  F += M0*strain0*dx*weight;
+                  b += weight;
                 }
                 if(M>0.01){
+                  float weight = clamp(M0, 0.0, 1.0)*GS(0.8*dx);
                   rho += M0*weight;
                   B += mat2(dv*dx.x,dv*dx.y)*weight;
+                  a += weight;
                 }
-                b += weight;
               }
-              B   /= b + 0.01;
-              rho /= b + 0.01;
+              B   /= a;
+              rho /= a;
               F   /= b;
               F = clamp(F, -0.4,0.4);
 
