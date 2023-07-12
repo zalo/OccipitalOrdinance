@@ -240,8 +240,8 @@ class OccipitalOrdinance {
           }
           
           X = X - pos;
-          XVOut = vec4(X, V);
-          MCOut = vec4(M, C, 1.0);
+          XVOut = clamp(vec4(X, V), -1.0, 1.0);
+          MCOut = vec4(M, clamp(C, 0.0, 1.0), 1.0);
       }`);
     Object.assign(this.bufferAPass.material.uniforms, this.uniforms);
     //this.bufferAPass.material.uniforms["map"] = { value: this.testTexture };
@@ -437,8 +437,8 @@ class OccipitalOrdinance {
           
           //save
           X = X - pos;
-          XVOut = vec4(X, V);
-          MCOut = vec4(MC.x, C, 1.0);
+          XVOut = clamp(vec4(X, V), -1.0, 1.0);
+          MCOut = vec4(MC.x, clamp(C, 0.0, 1.0), 1.0);
       }`);
     Object.assign(this.bufferCPass.material.uniforms, this.uniforms);
     //this.bufferBPass.material.uniforms["map"] = { value: this.testTexture };
