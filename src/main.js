@@ -438,7 +438,7 @@ class OccipitalOrdinance {
           //save
           X = X - pos;
           XVOut = vec4(X, V);
-          MCOut = vec4(M, C, 1.0);
+          MCOut = vec4(MC.x, C, 1.0);
       }`);
     Object.assign(this.bufferCPass.material.uniforms, this.uniforms);
     //this.bufferBPass.material.uniforms["map"] = { value: this.testTexture };
@@ -461,8 +461,7 @@ class OccipitalOrdinance {
           mat2  D = mat2(texelFetch(iChannel1, ivec2(mod(pos,R)), 0));
           vec2  X = XV.xy + pos;
           vec2  V = XV.zw;
-          float M = clamp(MC.x, 0., 2.0);
-          vec2  C = MC.yz;
+          float M = MC.x;
           
           if(M > 0.01) //not vacuum
           {
