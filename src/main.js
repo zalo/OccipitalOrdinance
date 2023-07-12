@@ -402,9 +402,9 @@ class OccipitalOrdinance {
                           vec4 XV0 = texelFetch(iChannel0[0], ivec2(mod(tpos,R)), 0);
                           vec4 MC0 = texelFetch(iChannel0[1], ivec2(mod(tpos,R)), 0);
 
-                          vec2  X0 = 0.*XV.xy + tpos; // INVESTIGATE WHY THIS IS MULTIPLIED BY 0.0
-                          vec2  V0 = XV.zw;
-                          float M0 = MC.x;
+                          vec2  X0 = 0.*XV0.xy + tpos; // INVESTIGATE WHY THIS IS MULTIPLIED BY 0.0
+                          vec2  V0 = XV0.zw;
+                          float M0 = MC0.x;
                           vec2  dx = X0 - X;
                           vec2  dv = V0 - V;
                           mat2  D0 = mat2(texelFetch(iChannel1, ivec2(mod(tpos,R)), 0));
@@ -484,12 +484,12 @@ class OccipitalOrdinance {
                   vec4 XV0 = texelFetch(iChannel0[0], ivec2(mod(tpos,R)), 0);
                   vec4 MC0 = texelFetch(iChannel0[1], ivec2(mod(tpos,R)), 0);
 
-                  vec2  X0 = XV.xy + tpos;
-                  vec2  V0 = XV.zw;
-                  float M0 = MC.x;
+                  vec2  X0 = XV0.xy + tpos;
+                  vec2  V0 = XV0.zw;
+                  float M0 = MC0.x;
                   vec2 dx = X0 - X;
                   vec2 dv = V0 - V;
-                  vec2 dsize = clamp(destimator(X0 - tpos, MC0.x), 0.3, 1.0);
+                  vec2 dsize = clamp(destimator(X0 - tpos, M0), 0.3, 1.0);
                   float weight = clamp(M0, 0.0, 1.0)*GS(0.8*dx);
                   rho += M0*weight;
                   B += mat2(dv*dx.x,dv*dx.y)*weight;
