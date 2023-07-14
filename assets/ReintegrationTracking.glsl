@@ -13,12 +13,12 @@ uniform int iFrame;
 #define range(i,a,b) for(int i = a; i <= b; i++)
 
 // squishy solid
-#define relax 0.000
-#define distribution_size 1.0
+uniform float relax; //0.000
+uniform float distribution_size; // 1.0
 // Lamé parameters for stress-strain relationship
-#define elastic_lambda 3.2
-#define elastic_mu 4.2
-#define incompressible_viscosity 1.0
+uniform float elastic_lambda; // 3.2
+uniform float elastic_mu; // 4.2
+uniform float incompressible_viscosity; // 1.0
 
 // viscous fluid
 //#define relax 0.05

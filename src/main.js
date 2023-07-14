@@ -64,14 +64,26 @@ class OccipitalOrdinance {
               iFrame      : { value: 0 },
               iMouse      : { value: new THREE.Vector3() },
               iChannel0   : { value: null },
-              //iChannel1   : { value: null },
-              iResolution : { value: new THREE.Vector2(this.width, this.height) }
+              iResolution : { value: new THREE.Vector2(this.width, this.height) },
+              // squishy solid
+              relax                    : { value: 0.0 },
+              distribution_size        : { value: 1.0 },
+              elastic_lambda           : { value: 3.2 },
+              elastic_mu               : { value: 4.2 },
+              incompressible_viscosity : { value: 1.0 },
             }
 
             this.gui = new GUI()
             this.gui.add(this.uniforms.iterations, 'value', 1,  64).name('Iterations Per Frame');
             this.gui.add(this.uniforms.outputResolutionScale, 'value', 0.1,  1.0).name('Resolution Scale')
               .onChange(() => { this.renderer.setPixelRatio(window.devicePixelRatio * this.uniforms.outputResolutionScale.value); });
+
+            this.gui.add(this.uniforms.relax            , 'value', 0.0,  0.05).name('Relax');
+            this.gui.add(this.uniforms.distribution_size, 'value', 0.95, 1.05).name('Distribution Size');
+            this.gui.add(this.uniforms.elastic_lambda   , 'value', 0.01,  5.0).name('Elastic Lambda');
+            this.gui.add(this.uniforms.elastic_mu       , 'value', 0.01,  5.0).name('Elastic Mu');
+            this.gui.add(this.uniforms.incompressible_viscosity, 'value', 0.05,  1.0).name('Incompressible Viscosity');
+
             this.gui.open();
 
             this.createReintegrationSystem();
