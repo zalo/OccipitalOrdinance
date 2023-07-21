@@ -70,7 +70,7 @@ class OccipitalOrdinance {
               distribution_size        : { value: 1.0 },
               elastic_lambda           : { value: 3.2 },
               elastic_mu               : { value: 4.2 },
-              incompressible_viscosity : { value: 1.0 },
+              //incompressible_viscosity : { value: 1.0 },
             }
 
             this.gui = new GUI()
@@ -82,7 +82,7 @@ class OccipitalOrdinance {
             this.gui.add(this.uniforms.distribution_size, 'value', 0.95, 1.05).name('Distribution Size');
             this.gui.add(this.uniforms.elastic_lambda   , 'value', 0.01,  5.0).name('Elastic Lambda');
             this.gui.add(this.uniforms.elastic_mu       , 'value', 0.01,  5.0).name('Elastic Mu');
-            this.gui.add(this.uniforms.incompressible_viscosity, 'value', 0.05,  1.0).name('Incompressible Viscosity');
+            //this.gui.add(this.uniforms.incompressible_viscosity, 'value', 0.05,  1.0).name('Incompressible Viscosity');
 
             this.gui.open();
 
@@ -138,7 +138,7 @@ class OccipitalOrdinance {
           vec2   C = vec2(0.); // Original UV Position
           mat2   D = mat2(0);  // Deformation Gradient
 
-          Grid2Particle(pos, iChannel2, scene, X, V, M, C, D);
+          Particle2Grid(pos, iChannel2, scene, X, V, M, C, D);
 
           XVOut = clamp(vec4(X, V), -1.0, 1.0);
           MCOut = vec4(M, clamp(C, 0.0, 1.0), 1.0);
@@ -169,7 +169,7 @@ class OccipitalOrdinance {
           vec2   C = vec2(0.); // Original UV Position
           mat2   D = mat2(0);  // Deformation Gradient
 
-          Particle2Grid(pos, iChannel0, iMouse, X, V, M, C, D);
+          Grid2Particle(pos, iChannel0, iMouse, X, V, M, C, D);
           
           XVOut = clamp(vec4(X, V), -1.0, 1.0);
           MCOut = vec4(M, clamp(C, 0.0, 1.0), 1.0);
